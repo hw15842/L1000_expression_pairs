@@ -11,4 +11,4 @@
 
 echo "Running on ${HOSTNAME}"
 module add languages/r/4.0.3 
-Rscript extracting_expression_pairs_L1000_data.R /mnt/storage/scratch/hw15842/repo/L1000_expression_pairs/Data
+Rscript extracting_expression_pairs_L1000_data.R /mnt/storage/scratch/hw15842/repo/L1000_expression_pairs/Data/
