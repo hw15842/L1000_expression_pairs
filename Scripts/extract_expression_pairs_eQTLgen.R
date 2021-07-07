@@ -54,7 +54,7 @@ func_split <- function(SNP){
 }
 
 
-trans_and_cis_list_dfs <- lapply(1:length(trans_unique_eQTLs, func_split)
+trans_and_cis_list_dfs <- lapply(1:length(trans_unique_eQTLs), func_split)
 
 
 
