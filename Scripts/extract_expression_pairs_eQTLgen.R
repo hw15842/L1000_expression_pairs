@@ -13,6 +13,10 @@ library("plyr")
 
 setwd(paste0(data_location))
 
+
+### I have now deleted the eQTLgen files as they are very large, but do not take long to download from here https://www.eqtlgen.org/
+## downloaded the new ones not the initial relese ones 
+
 sig_trans_eQTLs_filename <- gzfile('2018-09-04-trans-eQTLsFDR0.05-CohortInfoRemoved-BonferroniAdded.txt.gz','rt')  
 sig_trans_eQTLs <- read.table(sig_trans_eQTLs_filename,header=T)
 
