@@ -100,7 +100,7 @@ sort_entrez <- uniq_entrez[order(as.numeric(uniq_entrez$index)),]
 
 ## load in the GTEx pairs - this data is copied from supplementray table 2 in this paper https://genome.cshlp.org/content/27/11/1859.full
 
-GTEx_cis_trans_pairs_gene_symbols <- read.csv("/GTEx_cis_trans_pairs_gene_symbols.csv", header=T)
+GTEx_cis_trans_pairs_gene_symbols <- read.csv("GTEx_cis_trans_pairs_gene_symbols.csv", header=T)
 
 GTEx_cis_trans_pairs_gene_symbols <- GTEx_cis_trans_pairs_gene_symbols[!(as.character(GTEx_cis_trans_pairs_gene_symbols$transGene.Symbol)==""),]
 
