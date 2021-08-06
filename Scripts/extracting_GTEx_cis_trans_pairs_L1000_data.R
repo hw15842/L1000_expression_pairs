@@ -106,7 +106,7 @@ GTEx_cis_trans_pairs_gene_symbols <- GTEx_cis_trans_pairs_gene_symbols[!(as.char
 
 
 # keep the proteins in collumn 1 (We are not doing the reverse we are looking at directions so taking the cis genes first) that are in d2 dataset in the perturbations internal name column - d2 has been subset for the purturbations Tom wanted
-GTEX_pairs_l1000 <- subset(GTEx_cis_trans_pairs_gene_symbol, cisGene.Symbol %in% d2$pert_iname) 
+GTEX_pairs_l1000 <- subset(GTEx_cis_trans_pairs_gene_symbols, cisGene.Symbol %in% d2$pert_iname) 
 # from prot_pairs_l1000, keep just the proteins in column 2 that match the entrez dataset hgnc symbol - just the trans genes now
 GTEx_pairs_l1000 <- subset(GTEx_pairs_l1000, transGene.Symbol %in% sort_entrez$hgnc_symbol)  
 
