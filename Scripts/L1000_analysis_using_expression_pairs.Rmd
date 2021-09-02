@@ -33,6 +33,8 @@ It takes the significant trans eQTLs, extracts them from the full cis data, comb
 So this is not the expression pairs, just the significant eQTL-gene pairs that we are using - so using this to calculate the mass pleio (not the full trans and cis datasets) - check with Gib and Eleanor!
 
 ```{r}
+
+
 load("/Users/hw15842/Documents/PhD_work/Chapter4_L1000_MR_triplicates_analyses/L1000_expression_pairs/Data/gene_expression_pairs_l1000_results.rdata")
 load("/Users/hw15842/Documents/PhD_work/Chapter4_L1000_MR_triplicates_analyses/L1000_expression_pairs/Data/gene_expression_pairs_rsq_data.rdata")
 load("/Users/hw15842/Documents/PhD_work/Chapter4_L1000_MR_triplicates_analyses/L1000_expression_pairs/Data/trans_and_cis_combined_sig.rdata")
@@ -89,6 +91,8 @@ Steiger direction is just if the first R-sq is bigger than the second
 steiger_pval which is a test to see if rsq.exposure is significantly larger than rsq.outcome
 
 ```{r}
+
+
 library(psych)
 
 add_rsq_steiger_dat <- function(row, dataset){
@@ -120,6 +124,8 @@ We now need to compare them to the L1000 data
 
 
 ```{r}
+
+
 # get the highest absolute z-score from each expression pair and calculate the pval and fdr 
 
 load("/Users/hw15842/Documents/PhD_work/Chapter4_L1000_MR_triplicates_analyses/L1000_expression_pairs/Data/L1000_expression_pair_averages.rdata")
@@ -137,6 +143,7 @@ So only 2.57% of the expression pairs are significant in the L1000 data -  this 
 Look what it would be for the mass or non-mass pleio expression pairs 
 
 ```{r}
+
 
 ## need to extract the expression pairs in both directions from the L1000 data i.e. var 1 on var2 and var2 on var1 
 mp_L1000_data <- subset(L1000_expression_pair_averages, L1000_expression_pair_averages$gene_1 %in% mp_exp_pairs$Var1 & L1000_expression_pair_averages$gene_2 %in% mp_exp_pairs$Var2 | L1000_expression_pair_averages$gene_1 %in% mp_exp_pairs$Var2 & L1000_expression_pair_averages$gene_2 %in% mp_exp_pairs$Var1)
@@ -180,6 +187,7 @@ We will assess this in two ways
 #### Does a smaller steiger pvalue correlate with a smaller FDR value
 
 ```{r}
+
 
 # Does a smaller steiger pvalue correlate with a smaller FDR value
 
@@ -281,17 +289,17 @@ Is the direction (not magintide) the same
 
 ## and this as a percentage of the total cell type experiments 
 
-library(dplyr)
-
-gene_expression_cell_type_info <- bind_rows(gene_expression_list_dfs_cell_type_info)
-
-freq_experiment <- data.frame(table(max_abs_Z_experiment_expression$experiment_name))
-
-most_common_experiment <- freq_experiment[which.max(freq_experiment$Freq),]
-
-total_num_of_mc_exp <- length(grep(paste0(most_common_experiment[1,1]), gene_expression_cell_type_info$experiment_name))
-
-(most_common_experiment[1,2] / total_num_of_mc_exp)*100
+# library(dplyr)
+# 
+# gene_expression_cell_type_info <- bind_rows(gene_expression_list_dfs_cell_type_info)
+# 
+# freq_experiment <- data.frame(table(max_abs_Z_experiment_expression$experiment_name))
+# 
+# most_common_experiment <- freq_experiment[which.max(freq_experiment$Freq),]
+# 
+# total_num_of_mc_exp <- length(grep(paste0(most_common_experiment[1,1]), gene_expression_cell_type_info$experiment_name))
+# 
+# (most_common_experiment[1,2] / total_num_of_mc_exp)*100
 
 # 11.35133 - the experiment that has the most maximum z scores is found at a rate of 11% compared to the number of times that experiemnt is found in this data 
 # It is also the same as the protein most common experiment CGS001_VCAP_120H
