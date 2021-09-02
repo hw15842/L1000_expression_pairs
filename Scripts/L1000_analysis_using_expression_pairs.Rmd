@@ -1,0 +1,557 @@
+---
+title: "L1000_analysis_using_expression_pairs"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Three questions to answer 
+
+1. Can the significant expression pairs predict the same expression pairs as the L1000 data 
+2. Can the significant expression pairs predict the same orientation as the L1000 data 
+3. Can the significant expression pairs predict the same direction of effect as the L1000 data 
+
+For tehe expression pairs we haven't run an MR, we have just extracted the significant trans eQTLs from the eQTL-gene pairs from the full cis data and then created a new FDR pval and subseted that on 0.05 
+
+From this subsetted data created expression pairs - i.e. any genes that share an eQTL (these are sig based on the new fdr correct pval)
+
+We need to load in:
+
+* expression pairs from L1000
+* expression pairs MR with R-sq data
+* trans_cis_combined_sig - the dataset before makking the expression pairs
+
+
+To determine which eQTLs are "mass pleiotropy" ones we need to use the "trans_cis_combined_sig.rdata" dataset
+
+This is created in "extract_expression_pairs_eQTLgen.R" script
+
+It takes the significant trans eQTLs, extracts them from the full cis data, combined the sig trans and extracted cis datasets, creates a new fdr pval for the combined dataset, and then subsets on a 0.05 significance value
+
+So this is not the expression pairs, just the significant eQTL-gene pairs that we are using - so using this to calculate the mass pleio (not the full trans and cis datasets) - check with Gib and Eleanor!
+
+```{r}
+load("/Users/hw15842/Documents/PhD_work/Chapter4_L1000_MR_triplicates_analyses/L1000_expression_pairs/Data/gene_expression_pairs_l1000_results.rdata")
+load("/Users/hw15842/Documents/PhD_work/Chapter4_L1000_MR_triplicates_analyses/L1000_expression_pairs/Data/gene_expression_pairs_rsq_data.rdata")
+load("/Users/hw15842/Documents/PhD_work/Chapter4_L1000_MR_triplicates_analyses/L1000_expression_pairs/Data/trans_and_cis_combined_sig.rdata")
+
+# make SNP column as.character to remove un-wanted data 
+
+trans_and_cis_combined_sig$SNP <- as.character(trans_and_cis_combined_sig$SNP)
+
+freq_table_eQTLs <- data.frame(table(trans_and_cis_combined_sig$SNP))
+
+table(freq_table_eQTLs$Freq > 50)
+
+# 3266 eQTLs that associate with fewer than 50 genes, 587 that associate with more tahn 50 genes 
+
+table(freq_table_eQTLs$Freq == 50)
+
+# so there are 9 eQTLs taht associate with exactly 50 genes so we need to be consistant with using "more than 50", i.e. if they associate with exactly 50 genes they are NOT mass pleiotropy pQTLs (as this is what we did for the proteins but there werent any that associated with exactly 50)
+
+mass_pleio_eQTLs <- subset(freq_table_eQTLs, freq_table_eQTLs$Freq > 50) # MORE THAN 50 (ones that associate with exactly 50 are NOT mass pleio)
+
+
+## Remove the expression pairs that are due to a mass pleio eQTL 
+
+all_exp_pairs <- gene_expression_pairs_rsq_data
+mp_exp_pairs <- subset(gene_expression_pairs_rsq_data, gene_expression_pairs_rsq_data$Var1_SNP %in% mass_pleio_eQTLs$Var1)
+non_mp_exp_pairs <- subset(gene_expression_pairs_rsq_data, !gene_expression_pairs_rsq_data$Var1_SNP %in% mass_pleio_eQTLs$Var1)
+
+# going to do all subsequent analyses on all three of these datasets.... 
+
+```
+
+
+So we have determined the mass pleiotropy eQTLS based on how many genes they associte with in our dataset (sig trans eQTLs subsetted from cis data, combined andnew fdr calculated)
+
+We have three datasets now that have expression pair information with rsq data etc 
+all_exp_pairs = this is the original expression pair data
+mp_exp_pairs = the expression pairs that are due to a mass pleiotropy eQTL
+non_mp_exp_pairs = the expression pairs that are due to a non-mass pleiotropy eQTL
+
+Going to run all subsequent analysis on all three datasets 
+
+
+
+## 1. Can the significant expression pairs predict the same expression pairs as the L1000 data 
+
+We have the R-sq data for each eQTL-gene pair 
+
+This means for each row in the expression pair datasets we have two R-sq values one for each gene in the gene pair 
+
+We need to calculate the correlations between the R-sq with the steiger test 
+
+Steiger direction is just if the first R-sq is bigger than the second
+
+steiger_pval which is a test to see if rsq.exposure is significantly larger than rsq.outcome
+
+```{r}
+library(psych)
+
+add_rsq_steiger_dat <- function(row, dataset){
+  
+  df <- dataset[row,]
+  st <- r.test(
+		n = df$Var1_NrSamples, 
+		n2 = df$Var2_NrSamples, 
+		r12 = sqrt(df$Var1_rsq), 
+		r34 = sqrt(df$Var2_rsq)
+	)
+  
+  df$steiger_dir <- df$Var1_rsq > df$Var2_rsq
+	df$steiger_pval <- pnorm(-abs(st$z)) * 2
+	
+	return(df)
+}
+
+
+all_exp_pairs <- add_rsq_steiger_dat(1:nrow(all_exp_pairs), all_exp_pairs)
+mp_exp_pairs <- add_rsq_steiger_dat(1:nrow(mp_exp_pairs), mp_exp_pairs)
+non_mp_exp_pairs <- add_rsq_steiger_dat(1:nrow(non_mp_exp_pairs), non_mp_exp_pairs)
+
+```
+
+So we have the steiger direction and p-value now for each of the three datasets 
+
+We now need to compare them to the L1000 data 
+
+
+```{r}
+# get the highest absolute z-score from each expression pair and calculate the pval and fdr 
+
+load("/Users/hw15842/Documents/PhD_work/Chapter4_L1000_MR_triplicates_analyses/L1000_expression_pairs/Data/L1000_expression_pair_averages.rdata")
+
+L1000_expression_pair_averages$largest <- ifelse(abs(L1000_expression_pair_averages$min) > abs(L1000_expression_pair_averages$max), L1000_expression_pair_averages$min, L1000_expression_pair_averages$max)
+L1000_expression_pair_averages$pval_max_z <- (pnorm(abs(L1000_expression_pair_averages$largest), lower.tail=F))*2
+L1000_expression_pair_averages$fdr <- p.adjust(L1000_expression_pair_averages$pval_max_z, "fdr")
+
+# What percentage of the L1000 expression pairs is sig at 0.05 after adjusting for fdr pval 
+prop.table(table(L1000_expression_pair_averages$fdr<0.05))*100
+```
+
+So only 2.57% of the expression pairs are significant in the L1000 data -  this is all of the expression pairs extracted from the data 
+
+Look what it would be for the mass or non-mass pleio expression pairs 
+
+```{r}
+
+## need to extract the expression pairs in both directions from the L1000 data i.e. var 1 on var2 and var2 on var1 
+mp_L1000_data <- subset(L1000_expression_pair_averages, L1000_expression_pair_averages$gene_1 %in% mp_exp_pairs$Var1 & L1000_expression_pair_averages$gene_2 %in% mp_exp_pairs$Var2 | L1000_expression_pair_averages$gene_1 %in% mp_exp_pairs$Var2 & L1000_expression_pair_averages$gene_2 %in% mp_exp_pairs$Var1)
+
+
+non_mp_L1000_data <- subset(L1000_expression_pair_averages, L1000_expression_pair_averages$gene_1 %in% non_mp_exp_pairs$Var1 & L1000_expression_pair_averages$gene_2 %in% non_mp_exp_pairs$Var2 | L1000_expression_pair_averages$gene_1 %in% non_mp_exp_pairs$Var2 & L1000_expression_pair_averages$gene_2 %in% non_mp_exp_pairs$Var1)
+
+all_L1000_data <- L1000_expression_pair_averages
+
+# add in new fdr pval (also add for all data so have the same name / num of columns)
+
+mp_L1000_data$fdr_new <- p.adjust(mp_L1000_data$pval_max_z, "fdr")
+non_mp_L1000_data$fdr_new <- p.adjust(non_mp_L1000_data$pval_max_z, "fdr")
+all_L1000_data$fdr_new <- p.adjust(all_L1000_data$pval_max_z, "fdr")
+
+# what percentage of these have a sig fdr
+
+# non adjusted fdr
+prop.table(table(mp_L1000_data$fdr<0.05))*100
+prop.table(table(non_mp_L1000_data$fdr<0.05))*100
+
+# adjusted fdr
+prop.table(table(mp_L1000_data$fdr_new<0.05))*100
+prop.table(table(non_mp_L1000_data$fdr_new<0.05))*100
+
+```
+
+basically all the same, just over 2.5% of them have a significant fdr 
+
+
+
+
+## 2. Can the significant expression pairs predict the same orientation as the L1000 data 
+
+We will assess this in two ways 
+
+* Does a smaller steiger pvalue correlate with a smaller FDR value 
+* Does the R^2^ orientation match the L1000 orientation (for the L1000 data that has data about both protein orientations)
+
+
+#### Does a smaller steiger pvalue correlate with a smaller FDR value
+
+```{r}
+
+# Does a smaller steiger pvalue correlate with a smaller FDR value
+
+data_func <- function(dataset_L1000, dataset_Rsq){
+  
+  df_Rsq <- dataset_Rsq
+  df_L1000 <- dataset_L1000
+  
+  # convert rsq data to be the "correct" direction
+  df_Rsq$gene_1 <- ifelse(df_Rsq$steiger_dir == TRUE, paste0(as.character(df_Rsq$Var1)), paste0(as.character(df_Rsq$Var2)))
+  df_Rsq$gene_2 <- ifelse(df_Rsq$steiger_dir == TRUE, paste0(as.character(df_Rsq$Var2)), paste0(as.character(df_Rsq$Var1)))
+  
+  # merge the L100 and R-sq data 
+  
+  df_L1000$gene1_on_gene2 <- paste0(df_L1000$gene_1, "_on_", df_L1000$gene_2)
+  df_Rsq$gene1_on_gene2 <- paste0(df_Rsq$gene_1, "_on_", df_Rsq$gene_2)
+  
+  rsq_and_L1000_dat <- merge(df_Rsq, df_L1000, by="gene1_on_gene2")
+  
+  # perform T-Test
+  
+  sig_steiger_pval <- subset(rsq_and_L1000_dat, rsq_and_L1000_dat$steiger_pval < 0.05)
+  non_sig_steiger_pval <- subset(rsq_and_L1000_dat, rsq_and_L1000_dat$steiger_pval > 0.05)
+
+  return(list(rsq_and_L1000_dat,t.test(-log10(sig_steiger_pval$fdr_new), -log10(non_sig_steiger_pval$fdr_new)), df_L1000, df_Rsq))
+}
+
+
+
+all <- data_func(all_L1000_data, all_exp_pairs)
+t_test_all <- all[[2]]
+t_test_all
+all_rsq_and_L1000_dat <- all[[1]]
+all_exp_pairs <- all[[4]]
+all_L1000_data <- all[[3]]
+
+mp <- data_func(mp_L1000_data, mp_exp_pairs)
+t_test_mp <- mp[[2]]
+t_test_mp
+mp_rsq_and_L1000_dat <- mp[[1]]
+mp_exp_pairs <- mp[[4]]
+mp_L1000_data <- mp[[3]]
+
+
+non_mp <- data_func(non_mp_L1000_data, non_mp_exp_pairs)
+t_test_non_mp <- non_mp[[2]]
+t_test_non_mp
+non_mp_rsq_and_L1000_dat <- non_mp[[1]]
+non_mp_exp_pairs <- non_mp[[4]]
+non_mp_L1000_data <- non_mp[[3]]
+
+
+```
+
+There is a significant difference between the fdr means between the significant and non-significant steiger pval groups
+
+However the CI are really small so wilst it is a significant difference it is not particuarly meaningful
+
+#### Does the R^2^ orientation match the L1000 orientation
+
+For the L1000 data that has data for gene 1 on gene 2 and for the reverse orientation, which orientation has the smallest fdr value and does the R-squared data predict the same direction?
+
+To assess this we will perform a binomial test 
+
+
+* Number of trials = number of L1000 gene pairs that have a fwd and rev
+* Probability of success = 0.5 (i.e. 50%)
+* Number of times correct = number of times that the steiger direction same as the L1000 direction
+
+
+
+```{r}
+
+# Does the R^2^ orientation match the L1000 orientation (for the L1000 data that has data about both protein orientations)
+
+
+
+# create two datasets - one with the correct (forward) orientaion (based on the rsq values) and one with the reverse orientation 
+
+
+
+```
+
+
+
+
+
+
+Is the direction (not magintide) the same
+
+
+
+
+
+
+
+```{r}
+
+
+## and this as a percentage of the total cell type experiments 
+
+library(dplyr)
+
+gene_expression_cell_type_info <- bind_rows(gene_expression_list_dfs_cell_type_info)
+
+freq_experiment <- data.frame(table(max_abs_Z_experiment_expression$experiment_name))
+
+most_common_experiment <- freq_experiment[which.max(freq_experiment$Freq),]
+
+total_num_of_mc_exp <- length(grep(paste0(most_common_experiment[1,1]), gene_expression_cell_type_info$experiment_name))
+
+(most_common_experiment[1,2] / total_num_of_mc_exp)*100
+
+# 11.35133 - the experiment that has the most maximum z scores is found at a rate of 11% compared to the number of times that experiemnt is found in this data 
+# It is also the same as the protein most common experiment CGS001_VCAP_120H
+
+```
+
+
+
+
+
+
+
+
+# Looking at just cis to trans pairs
+
+now just going to select the protein pairs that are from the cis to trans direction
+
+```{r}
+library(dplyr)
+
+load("/Users/hw15842/Documents/PhD_work/Chapter4_L1000_MR_triplicates_analyses/L1000_expression_pairs/Data/trans_and_cis_combined_sig.rdata")
+
+# merge the original trans and cis combined dataset (sig at the new fdr corrected pval 0.05) from the"extract_expression_pairs_eQTLgen.R" script
+# filter them so that the first gene and the second gene are always on different chromosomes 
+cis_to_trans_pairs <- merge(trans_and_cis_combined_sig, trans_and_cis_combined_sig, by="SNP") %>% filter(GeneChr.x != GeneChr.y)
+
+table(cis_to_trans_pairs$SNPChr.x == cis_to_trans_pairs$GeneChr.x)
+
+# Strict cis/trans threshold - only keep the pairs where the snp is on the same chromosome as the cis gene
+cis_to_trans_pairs <- subset(cis_to_trans_pairs, SNPChr.x == GeneChr.x)
+
+# so we now have a data set of gene expression pairs where the "x" data is the gene in cis with the eQTL and the "y" data is the gene that is trans from the eQTL and the first gene
+# We are using a loose threshold for "cis" --> have to be on same chromosome
+# and a strict threshold for "trans" --> have to be on a different chromosome 
+
+
+
+```
+
+
+
+Now that we have the expression pairs that are only in the cis to trans direction (in comparison to the eQTL) we need to look at:
+
+* the Rsq values 
+* mass vs non-mass pleio
+
+
+```{r}
+
+
+SNP_freq <- table(cis_to_trans_pairs$SNP)
+cis_to_trans_pairs_nonmp <- subset(cis_to_trans_pairs, ! SNP %in% names(SNP_freq)[SNP_freq > 50])
+cis_to_trans_pairs_mp <- subset(cis_to_trans_pairs, SNP %in% names(SNP_freq)[SNP_freq > 50])
+
+nrow(cis_to_trans_pairs)
+nrow(cis_to_trans_pairs_mp)
+nrow(cis_to_trans_pairs_nonmp)
+
+# Histogram of the differences between the RSq values of the cis gene and trans gene 
+
+hist(cis_to_trans_pairs$rsq.x - cis_to_trans_pairs$rsq.y, breaks=100)
+hist(cis_to_trans_pairs_mp$rsq.x - cis_to_trans_pairs_mp$rsq.y, breaks=100)
+hist(cis_to_trans_pairs_nonmp$rsq.x - cis_to_trans_pairs_nonmp$rsq.y, breaks=100)
+
+# Same pattern for each of the datasets -  mass pleio vs nonmass pleio vs all
+
+# Just going to take the non-mass pleio dataset forward as that is what we have done with the protein pairs
+
+```
+
+
+
+As we can see from the histograms we have a longer tail skewed towards the positive end of the graph
+
+This shows that there are larger differences between the R-sq values when the cis R-sq value is largest 
+
+* Are the pairs that have difference of greater than 0.02 more enriched in L1000
+* Is there a correlation of the larger the Rsq difference, the larger the FDR corrected pval in L1000
+
+
+```{r}
+
+cis_to_trans_pairs_nonmp$rsqx_minus_rsqy <- cis_to_trans_pairs_nonmp$rsq.x - cis_to_trans_pairs_nonmp$rsq.y
+
+cis_to_trans_pairs_nonmp$gene1_on_gene2 <- paste0(cis_to_trans_pairs_nonmp$GeneSymbol.x, "_on_", cis_to_trans_pairs_nonmp$GeneSymbol.y)
+
+cis_to_trans_pairs_nonmp_with_L1000 <- merge(cis_to_trans_pairs_nonmp, all_L1000_data, by="gene1_on_gene2")
+
+table(cis_to_trans_pairs_nonmp_with_L1000$fdr_new < 0.05)
+prop.table(table(cis_to_trans_pairs_nonmp_with_L1000$fdr_new < 0.05))*100
+
+plot(cis_to_trans_pairs_nonmp_with_L1000$rsqx_minus_rsqy, cis_to_trans_pairs_nonmp_with_L1000$fdr_new)
+
+more_0.02_rsq_diff <- subset(cis_to_trans_pairs_nonmp_with_L1000, cis_to_trans_pairs_nonmp_with_L1000$rsqx_minus_rsqy > 0.02)
+
+table(more_0.02_rsq_diff$fdr_new < 0.05)
+prop.table(table(more_0.02_rsq_diff$fdr_new < 0.05))*100
+
+plot(more_0.02_rsq_diff$rsqx_minus_rsqy, more_0.02_rsq_diff$fdr_new)
+
+
+```
+
+
+
+Is there a better way to compare the rsqx and rsqy to determine which expression pairs are the "most" reliable
+
+We want to find pairs where the most likely relationship is eQTL --> gene expression 1 (x) (cis) --> gene expression 2 (y) (trans)
+
+```{r}
+# rsq.y over rsq.x --> this is the ratio of the Rsqs 
+# Rate of chane in y for rate of change in x
+# Large value = Rsqy has a larger rate of change than Rsqx  --> unlikely to be in order of cis then trans...? (check with G and E)
+cis_to_trans_pairs_nonmp_with_L1000$rsqy_over_rsqx <-  cis_to_trans_pairs_nonmp_with_L1000$rsq.y / cis_to_trans_pairs_nonmp_with_L1000$rsq.x
+
+plot(cis_to_trans_pairs_nonmp_with_L1000$rsqy_over_rsqx, -log10(cis_to_trans_pairs_nonmp_with_L1000$fdr_new))
+hist(cis_to_trans_pairs_nonmp_with_L1000$rsqy_over_rsqx, breaks=100)
+
+
+```
+
+```{r}
+# (rsqx - rsqy)/rsqx --> difference between the rates of the Rsqs divided by the rate of change in X (cis)
+#
+
+cis_to_trans_pairs_nonmp_with_L1000$x_minus_y_over_x <-  ((cis_to_trans_pairs_nonmp_with_L1000$rsq.x)-(cis_to_trans_pairs_nonmp_with_L1000$rsq.y)) / cis_to_trans_pairs_nonmp_with_L1000$rsq.x
+
+hist(cis_to_trans_pairs_nonmp_with_L1000$x_minus_y_over_x, breaks=100)
+
+hist(cis_to_trans_pairs_nonmp_with_L1000$x_minus_y_over_x[cis_to_trans_pairs_nonmp_with_L1000$x_minus_y_over_x > 0], breaks=100)
+hist(cis_to_trans_pairs_nonmp_with_L1000$x_minus_y_over_x[cis_to_trans_pairs_nonmp_with_L1000$x_minus_y_over_x > -1], breaks=100)
+
+```
+
+
+
+```{r}
+# (rsqy/rsqx) * sign(rsqx-rsqy)  --> Variance explained in Y due to causal effect of X
+# 
+
+cis_to_trans_pairs_nonmp_with_L1000$sign_rate_of_change <-  (cis_to_trans_pairs_nonmp_with_L1000$rsq.y / cis_to_trans_pairs_nonmp_with_L1000$rsq.x) * sign((cis_to_trans_pairs_nonmp_with_L1000$rsq.x)-(cis_to_trans_pairs_nonmp_with_L1000$rsq.y))
+
+hist(cis_to_trans_pairs_nonmp_with_L1000$sign_rate_of_change, breaks=100)
+
+hist(cis_to_trans_pairs_nonmp_with_L1000$sign_rate_of_change[cis_to_trans_pairs_nonmp_with_L1000$sign_rate_of_change > -1], breaks=100)
+hist(cis_to_trans_pairs_nonmp_with_L1000$sign_rate_of_change[cis_to_trans_pairs_nonmp_with_L1000$sign_rate_of_change > -2], breaks=100)
+
+
+tapply(-log10(cis_to_trans_pairs_nonmp_with_L1000$fdr_new), cis_to_trans_pairs_nonmp_with_L1000$sign_rate_of_change>0, mean)
+# mean of the fdr if the sign rate change is positive
+# doesnt really make much difference 
+
+tapply(-log10(cis_to_trans_pairs_nonmp_with_L1000$fdr_new), cis_to_trans_pairs_nonmp_with_L1000$sign_rate_of_change>0.5, mean)
+
+```
+
+
+
+
+
+
+cols:
+gene1
+experiment
+num
+z
+pleiotropy_number
+
+
+# determining pleiotropy in the L1000 data 
+
+```{r}
+# get the nmber of times that a gene is associated with another gene and get the average Z score
+# we are using all the data here, not just to absoulte largest z-score 
+# still using absolute Z scores (removing the sign) but its the average for that gene across all the genes it associates with and all experiment types 
+
+gene_freq <- gene_expression_pairs_l1000_results %>% group_by(gene_1) %>% summarise(n=n(), z=mean(abs(Z)))
+
+plot(z ~ n, gene_freq)
+summary(lm(z ~ n, gene_freq))
+
+
+gene_freq <- gene_freq[order(gene_freq$n),]
+
+mass_pleio_gene_list <- tail(gene_freq, n= ceiling(nrow(gene_freq)/10))  # The top 10% are the ones we will consider as mass pleiotropy genes - associate with more than 11,550 genes in this case
+
+save(mass_pleio_gene_list, file="/Users/hw15842/Documents/PhD_work/Chapter4_L1000_MR_triplicates_analyses/L1000_expression_pairs/Data/mass_pleio_gene_list.rdata")
+
+save(gene_freq, file="/Users/hw15842/Documents/PhD_work/Chapter4_L1000_MR_triplicates_analyses/L1000_expression_pairs/Data/gene_freq.rdata")
+```
+
+Ran script extracting_L1000_mass_pleio_genes_data.R on BC4 and got the L1000 Z scores for the mass pleio genes 
+
+num_cols_gene is the number of times that gene had its own "column" --> different experiment types (have kept all this info in "mass_pleio_genes_L1000_z_scores.rdata")
+
+
+Also ran "extracting_L1000_mass_pleio_data_for_all_genes_data.R" to get the data for all the genes not just mass pleio ones 
+
+```{r}
+load("/Users/hw15842/Documents/PhD_work/Chapter4_L1000_MR_triplicates_analyses/L1000_expression_pairs/Data/mass_pleio_genes_L1000_z_scores_summary.rdata")
+load("/Users/hw15842/Documents/PhD_work/Chapter4_L1000_MR_triplicates_analyses/L1000_expression_pairs/Data/all_genes_L1000_z_scores_total_mean_z.rdata")
+
+library(psych)
+
+add_rsq_steiger_dat_2 <- function(row, dataset){
+  
+  df <- dataset[row,]
+  st <- r.test(
+		n = df$NrSamples.x, 
+		n2 = df$NrSamples.y, 
+		r12 = sqrt(df$rsq.x), 
+		r34 = sqrt(df$rsq.y)
+	)
+  
+  df$steiger_dir <- df$rsq.x > df$rsq.y
+	df$steiger_pval <- pnorm(-abs(st$z)) * 2
+	
+	return(df)
+}
+
+
+cis_to_trans_pairs <- add_rsq_steiger_dat_2(1:nrow(cis_to_trans_pairs), cis_to_trans_pairs)
+
+table(cis_to_trans_pairs$steiger_dir)# even though have made it so it goes cis to trans, not all the steiger pvals agree on that direction
+prop.table(table(cis_to_trans_pairs$steiger_dir))*100
+
+z_scores_n <- merge(all_genes_L1000_z_scores_total_mean_z, gene_freq[1:2], by="gene_1")
+plot(z_scores_n$z, z_scores_n$n)
+
+summary(lm(z ~ n, z_scores_n))
+
+
+ggplotRegression <- function (fit) {
+  
+  require(ggplot2)
+  
+  ggplot(fit$model, aes_string(x = names(fit$model)[2], y = names(fit$model)[1])) + 
+    geom_point() +
+    stat_smooth(method = "lm", col = "red") +
+    labs(title = paste("Adj R2 = ",signif(summary(fit)$adj.r.squared, 5),
+                       "Intercept =",signif(fit$coef[[1]],5 ),
+                       " Slope =",signif(fit$coef[[2]], 5),
+                       " P =",signif(summary(fit)$coef[2,4], 5)))
+}
+
+
+
+fit1 <- lm(z ~ n, z_scores_n)
+regression_plot1 <- ggplotRegression(fit1)
+
+
+
+
+res = resid(fit1)
+
+plot(z_scores_n$n, res) 
+
+
+```
+
+
+
+
